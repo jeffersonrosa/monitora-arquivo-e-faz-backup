@@ -1,0 +1,7 @@
+name: monitora-arquivo-e-faz-backup
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+    - watchdog>=2.0.0
+    - rich>=12.6.0
