@@ -3,6 +3,7 @@ import sys
 import logging
 from datetime import datetime
 import time
+from threading import Thread
 
 import backup_manager
 import file_monitor
@@ -12,7 +13,7 @@ from rich.logging import RichHandler
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 
-# Caso queira um fallback baseado em loop (checando a cada X segundos):
+# Fallback baseado em loop (checando a cada X segundos) para casos em que o watchdog não detecta:
 ENABLE_FALLBACK_CHECK = True
 FALLBACK_INTERVAL = 10  # segundos
 
@@ -81,20 +82,22 @@ def interactive_setup(config):
     backup_dir = config.get("backup_directory", "")
     num_backups = config.get("number_of_backups", 3)
 
+    # Se existe um último arquivo e ele é válido
     if last_file and utils.file_exists(last_file):
         print(f"Último arquivo monitorado: {last_file}")
         resp = input("Deseja continuar monitorando este arquivo? (S/n) ").strip().lower()
         if resp == 'n':
+            # Escolhe um novo arquivo
             last_file = choose_file()
     else:
         if not last_file:
-            print("Nenhum arquivo configurado.")
+            print("Nenhum arquivo configurado anteriormente.")
         last_file = choose_file()
 
     print("Deseja usar a pasta padrão 'backup' no mesmo diretório do arquivo monitorado?")
     resp = input("(S para usar a padrão, N para especificar outra pasta): ").strip().lower()
     if resp == 'n':
-        # Agora pedimos apenas o nome da pasta, que será criada ao lado do arquivo monitorado
+        # Pede o nome da pasta, que será criada ao lado do arquivo monitorado
         backup_name = input("Digite o nome da pasta de backup (será criada no mesmo diretório do arquivo): ").strip()
         parent_dir = os.path.dirname(last_file)
         custom_backup = os.path.join(parent_dir, backup_name)
@@ -119,7 +122,6 @@ def interactive_setup(config):
     utils.save_config(CONFIG_PATH, config)
     return config
 
-
 def fallback_check(monitored_file, backup_dir, num_backups, extension):
     """Fallback: Checa periodicamente se o arquivo mudou e faz backup se necessário."""
     logger.info("Fallback de checagem ativado. Verificando alterações no arquivo periodicamente.")
@@ -138,7 +140,6 @@ def fallback_check(monitored_file, backup_dir, num_backups, extension):
             backup_manager.rotate_backups(backup_dir, num_backups, extension)
             logger.info("Backups rotacionados.")
             last_mtime = current_mtime
-
 
 def main():
     config = utils.load_config(CONFIG_PATH)
@@ -168,9 +169,7 @@ def main():
     logger.info("Use watchdog: True")
     logger.info(f"Extensão do arquivo monitorado: {extension}")
 
-    # Inicia o watchdog
-    # Em paralelo, se ENABLE_FALLBACK_CHECK for True, inicia o fallback em outra thread
-    from threading import Thread
+    # Inicia o watchdog em uma thread separada
     watchdog_thread = Thread(target=file_monitor.start_watchdog, args=(monitored_file, backup_dir, num_backups, logger, extension), daemon=True)
     watchdog_thread.start()
 
